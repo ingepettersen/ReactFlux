@@ -1,54 +1,51 @@
-name: Sync Fork with Upstream
+name: Sync med Upstream (electh/reactflux)
 
 on:
   schedule:
-    - cron: '0 */6 * * *'  # Hver 6. time – juster etter behov
-  workflow_dispatch:      # Manuell kjøring fra GitHub UI
+    - cron: '0 */6 * * *'  # Hver 6. time (kl. 00:00, 06:00, 12:00, 18:00 CET)
+  workflow_dispatch:       # Manuell kjøring fra GitHub
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout din fork
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Detect upstream repo from GitHub fork metadata
+      - name: Hent upstream fra GitHub (automatisk)
         id: upstream
         run: |
-          UPSTREAM=$(gh api repos/:owner/:repo --jq '.parent.full_name' 2>/dev/null || echo "")
-          if [ -z "$UPSTREAM" ]; then
-            echo "This is not a fork or upstream not detectable."
-            exit 1
-          fi
+          UPSTREAM=$(gh api repos/${{ github.repository }} --jq '.parent.full_name')
           echo "upstream=$UPSTREAM" >> $GITHUB_OUTPUT
-          echo "Upstream detected: $UPSTREAM"
+          echo "Oppstrøms repo: $UPSTREAM"
 
-      - name: Add or update upstream remote
+      - name: Legg til eller oppdater upstream remote
         run: |
           git remote remove upstream 2>/dev/null || true
           git remote add upstream https://github.com/${{ steps.upstream.outputs.upstream }}.git
 
-      - name: Fetch upstream
+      - name: Hent alle grener og tags fra upstream
         run: git fetch upstream --tags
 
-      - name: Determine default branch
+      - name: Finn default branch (main/master)
         id: branch
         run: |
-          DEFAULT=$(git remote show origin | grep 'HEAD branch' | cut -d' ' -f5)
-          echo "default_branch=$DEFAULT" >> $GITHUB_OUTPUT
-          echo "Default branch: $DEFAULT"
+          BRANCH=$(git remote show origin | grep 'HEAD branch' | cut -d' ' -f5)
+          echo "default_branch=$BRANCH" >> $GITHUB_OUTPUT
+          echo "Default branch: $BRANCH"
 
-      - name: Sync upstream/${{ steps.branch.outputs.default_branch }} into local
+      - name: Synkroniser upstream → din fork
         run: |
           git checkout ${{ steps.branch.outputs.default_branch }}
           git merge upstream/${{ steps.branch.outputs.default_branch }} --no-edit || {
-            echo "Merge conflict detected! Manual resolution required."
+            echo "KONFLIKT! Må løses manuelt på GitHub."
+            echo "Gå til: https://github.com/${{ github.repository }}/pulls"
             exit 1
           }
 
-      - name: Push to fork
+      - name: Push til din fork (trygt)
         run: |
           git push origin ${{ steps.branch.outputs.default_branch }} --force-with-lease
