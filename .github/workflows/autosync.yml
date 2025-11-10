@@ -1,4 +1,4 @@
-name: Sync med Upstream (electh/reactflux)
+name: Sync med Upstream (electh/ReactFlux)
 
 on:
   schedule:
@@ -15,22 +15,16 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Hent upstream fra GitHub (automatisk)
-        id: upstream
-        run: |
-          UPSTREAM=$(gh api repos/${{ github.repository }} --jq '.parent.full_name')
-          echo "upstream=$UPSTREAM" >> $GITHUB_OUTPUT
-          echo "Oppstrøms repo: $UPSTREAM"
-
       - name: Legg til eller oppdater upstream remote
         run: |
           git remote remove upstream 2>/dev/null || true
-          git remote add upstream https://github.com/${{ steps.upstream.outputs.upstream }}.git
+          git remote add upstream https://github.com/electh/ReactFlux.git
+          echo "Oppstrøms repo: electh/ReactFlux"
 
       - name: Hent alle grener og tags fra upstream
         run: git fetch upstream --tags
 
-      - name: Finn default branch (main/master)
+      - name: Finn default branch (main/gh-pages)
         id: branch
         run: |
           BRANCH=$(git remote show origin | grep 'HEAD branch' | cut -d' ' -f5)
