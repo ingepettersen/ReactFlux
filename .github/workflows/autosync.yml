@@ -1,0 +1,54 @@
+name: Sync Fork with Upstream
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'  # Hver 6. time – juster etter behov
+  workflow_dispatch:      # Manuell kjøring fra GitHub UI
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Detect upstream repo from GitHub fork metadata
+        id: upstream
+        run: |
+          UPSTREAM=$(gh api repos/:owner/:repo --jq '.parent.full_name' 2>/dev/null || echo "")
+          if [ -z "$UPSTREAM" ]; then
+            echo "This is not a fork or upstream not detectable."
+            exit 1
+          fi
+          echo "upstream=$UPSTREAM" >> $GITHUB_OUTPUT
+          echo "Upstream detected: $UPSTREAM"
+
+      - name: Add or update upstream remote
+        run: |
+          git remote remove upstream 2>/dev/null || true
+          git remote add upstream https://github.com/${{ steps.upstream.outputs.upstream }}.git
+
+      - name: Fetch upstream
+        run: git fetch upstream --tags
+
+      - name: Determine default branch
+        id: branch
+        run: |
+          DEFAULT=$(git remote show origin | grep 'HEAD branch' | cut -d' ' -f5)
+          echo "default_branch=$DEFAULT" >> $GITHUB_OUTPUT
+          echo "Default branch: $DEFAULT"
+
+      - name: Sync upstream/${{ steps.branch.outputs.default_branch }} into local
+        run: |
+          git checkout ${{ steps.branch.outputs.default_branch }}
+          git merge upstream/${{ steps.branch.outputs.default_branch }} --no-edit || {
+            echo "Merge conflict detected! Manual resolution required."
+            exit 1
+          }
+
+      - name: Push to fork
+        run: |
+          git push origin ${{ steps.branch.outputs.default_branch }} --force-with-lease
